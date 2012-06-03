@@ -1,0 +1,11 @@
+{
+  "name":"revelation-server",
+  "version":"0.0.1",
+  "dependencies": {
+	"express":">=2.2.0",
+	"socket.io" : "0.8.7",
+	"mongodb":"0.9.x",
+	"mongoose": ">= 2.0.0"
+  }
+}
+

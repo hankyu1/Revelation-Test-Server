@@ -12,6 +12,7 @@ app.listen(port);
 var lobby = [];
 var matchRoom = [];
 var json = JSON.stringify;
+console.log(port);
 
 // assuming io is the Socket.IO server object
 io.configure(function () {

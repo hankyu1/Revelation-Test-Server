@@ -106,6 +106,7 @@ functionTable["loginString"] = function(inputMessage, socket){
 	var loginInfo = mongo.model('loginInfo');
 	loginInfo.find({'username':username},['username','password'],function(err,data){
 		var isOnline = false;
+		
 		findIsOnline:
 		for(var i = 0; i < lobby.length; i++) {
 			if(lobby[i].username == username) {
@@ -433,6 +434,310 @@ battleCallTable['tie'] = function(inputMessage, room, player) {
 	room.Player2.send(tempJson);
 }
 
+// collection page
+var CollectionCallTable = {};
+functionTable['collection'] = function(inputMessage, socket) {
+	var userName = inputMessage.username;
+	
+	CollectionCallTable[inputMessage.call](inputMessage, userName, socket);
+}
+
+// get player's colleciton/hand
+CollectionCallTable['getAllCard'] = function(inputMessage, userName, socket) {
+	var collectInfo = mongo.model('collectInfo');
+	var handInfo = mongo.model('handInfo');
+	collectInfo.find({username:userName},['cards'],function(err, collectionCard) {
+		//console.log("collectInfo", data.length);
+		handInfo.find({username:userName},['cards'],function(err, handCard) {
+			var CollectionNames = [];
+			var HandNames = [];
+			
+			var cCard = collectionCard[0].cards;
+			var hCard = handCard[0].cards
+			
+			console.log("cCard", cCard[0].name);
+			console.log("hCard", hCard[0].name);
+			
+			for(var i = 0; i < cCard.length; i++) {
+				CollectionNames.push(cCard[i].name);
+			}
+			for(var i = 0; i < hCard.length; i++) {
+				HandNames.push(hCard[i].name);
+			}
+			
+			var tempJson = json({
+				type:"cardList",
+				Collection:CollectionNames,
+				Hand:HandNames,
+				collectNum:CollectionNames.length,
+				handNum:HandNames.length
+			});
+			socket.send(tempJson);
+		});
+		
+	});
+}
+
+// select Collection Card
+CollectionCallTable['selectCollectionCard'] = function(inputMessage, userName, socket) {
+	var cardIndex = inputMessage.cardIndex;
+	var collectInfo = mongo.model('collectInfo');	
+	collectInfo.find({username:userName},['cards'],function(err, data) {
+		var data = data[0].cards;
+		
+		var tempJson = json({
+			type:"cardInfo",
+			selectedCardInfo:data[cardIndex]
+		});
+
+		console.log(tempJson);
+		//console.log(cardNames, cardNames.length);
+		socket.send(tempJson);
+	});
+}
+
+// select Hand Card
+CollectionCallTable['selectHandCard'] = function(inputMessage, userName, socket) {
+	var handInfo = mongo.model('handInfo');
+	handInfo.find({username:userName},['cards'],function(err, data) {
+		//console.log("collectInfo", data.length);
+		//console.log("indexTexting:",data[0].cards[0]);
+		var data = data[0].cards;
+		
+		var tempJson = json({
+			type:"cardInfo",
+			selectedCardInfo:data[inputMessage.cardIndex]
+		});
+
+		console.log(tempJson);
+		//console.log(cardNames, cardNames.length);
+		socket.send(tempJson);
+	});
+}
+
+// insert a card from hand set to collection set
+CollectionCallTable['insertToCollection'] = function(inputMessage, userName, socket) {
+	var cardIndex = inputMessage.cardIndex;
+	var collectInfo = mongo.model('collectInfo');
+	var handInfo = mongo.model('handInfo');
+	
+	// copy and remove from hand
+	handInfo.find({username:userName},['cards'],function(err, data) {
+		// copy object (card)
+		var cardToInsert = data[0].cards[cardIndex];					
+		
+		// remove from hand
+		//handInfo.update({username:userName},{'$unset':{'cards':cardIndex}},function(){});
+		
+		data[0].cards[cardIndex].remove();
+		data[0].save();
+		
+		// insert to collection
+		collectInfo.find({username:userName},['cards'],function(err, data) {
+			data[0].cards.push(cardToInsert);
+			data[0].save(function(err){});
+		});
+	});
+}
+
+// insert a card from collection set to hand set
+CollectionCallTable['insertToHand'] = function(inputMessage, userName, socket) {
+	var cardIndex = inputMessage.cardIndex;
+	var collectInfo = mongo.model('collectInfo');
+	var handInfo = mongo.model('handInfo');
+	
+	// copy and remove from hand
+	collectInfo.find({username:userName},['cards'],function(err, data) {
+		// copy object (card)
+		var cardToInsert = data[0].cards[cardIndex];					
+		
+		// remove from collection
+		data[0].cards[cardIndex].remove();
+		data[0].save();
+		
+		/*
+		var tempCollect = data[0].cards;
+		tempCollect.splice(cardIndex-1,1);
+		collectInfo.update({username:userName},{upsert: true},{'$set':{'cards':tempHand}});
+		data[0].save(function(err){});
+		*/
+		
+		// insert to collection
+		handInfo.find({username:userName},['cards'],function(err, data) {
+			data[0].cards.push(cardToInsert);
+			data[0].save(function(err){});
+		});
+	});
+}
+
+// level up a card
+CollectionCallTable['levelUp'] = function(inputMessage, userName, socket) {
+	var cardIndex = inputMessage.cardIndex;
+	var from = inputMessage.from;
+	var userInfo = mongo.model('infoDisplay');
+	
+	if(from == "hand") {
+		var cardInfo = mongo.model('handInfo');
+		cardInfo.find({username:userName},['cards'],function(err, card) {
+			userInfo.find({username:userName},['exp'],function(err, user) {
+				// if enough exp
+				console.log("userInfoFormat: ", user[0]);
+				if(user[0].exp >= card[0].cards[cardIndex].exp && card[0].cards[cardIndex].level < 3) {
+					card[0].cards[cardIndex].level++;
+					card[0].cards[cardIndex].unspendedCP += 5;
+					user[0].exp -= card[0].cards[cardIndex].exp;
+					card[0].cards[cardIndex].exp += 200;
+					card[0].save(function(err){});
+					user[0].save(function(err){});
+					var cardInfo = card[0].cards[cardIndex];
+					var tempJson = json({
+						type:"levelupRefresh",
+						cardInfo:cardInfo,
+						userExp:user[0].exp
+					});
+					socket.send(tempJson);
+				}
+				// if reach max level
+				else if(card[0].cards[cardIndex].level >= 3) {
+					var tempJson = json({
+						type:"reachMaxLevel"
+					});
+					socket.send(tempJson);
+				}
+				// if not enought exp
+				else if(user[0].exp >= card[0].cards[cardIndex].exp){
+					var tempJson = json({
+						type:"notEnoughExp"
+					});
+					socket.send(tempJson);
+				}
+				
+			});
+		});
+	}
+	else if(from == "collection") {
+		var cardInfo = mongo.model('collectInfo');
+		cardInfo.find({username:userName},['cards'],function(err, card) {
+			userInfo.find({username:userName},['exp'],function(err, user) {
+				// if enough exp
+				if(user[0].exp >= card[0].cards[cardIndex].exp && card[0].cards[cardIndex].level < 3) {
+					console.log("cardLv: ", card[0].cards[cardIndex].level);
+					card[0].cards[cardIndex].level++;
+					card[0].cards[cardIndex].unspendedCP += 5;
+					user[0].exp -= card[0].cards[cardIndex].exp;
+					card[0].cards[cardIndex].exp += 200;
+					card[0].save(function(err){});
+					user[0].save(function(err){});
+					var cardInfo = card[0].cards[cardIndex];
+					var tempJson = json({
+						type:"levelupRefresh",
+						cardInfo:cardInfo,
+						userExp:user[0].exp
+					});
+					socket.send(tempJson);
+				}
+				// if reach max level
+				else if(card[0].cards[cardIndex].level >= 3) {
+					var tempJson = json({
+						type:"reachMaxLevel"
+					});
+					socket.send(tempJson);
+				}
+				// if not enought exp
+				else if(user[0].exp >= card[0].cards[cardIndex].exp) {
+					var tempJson = json({
+						type:"notEnoughExp"
+					});
+					socket.send(tempJson);
+				}
+				
+			});
+		});
+	}
+}
+
+// add attribute on a card
+CollectionCallTable['addAttribute'] = function(inputMessage, userName, socket) {
+	var cardIndex = inputMessage.cardIndex;
+	var from = inputMessage.from;
+	
+	// 58 = HitPoint, 59 = attack point, 60 = soul point, 61 = special effect
+	var attribute = inputMessage.attribute;
+	
+	// temp variabl
+	var userExp, cardInfo;
+	
+	console.log("attribute: ", attribute);
+	if(from == "hand") {
+		console.log("get level up from hand");
+		var handInfo = mongo.model('handInfo');
+		handInfo.find({username:userName},['cards'],function(err,data) {
+			if(attribute == 0) {
+				data[0].cards[cardIndex].hp += 20;
+				data[0].save(function(err){});
+			}
+			else if(attribute == 1) {
+				data[0].cards[cardIndex].ap += 5;
+				data[0].save(function(err){});
+			}
+			else if(attribute == 2) {
+				data[0].cards[cardIndex].sp += 1;
+				data[0].save(function(err){});
+			}
+			else if(attribute == 3) {
+				// not yet ready for test
+			}
+			
+			//data[0].cards[cardIndex].level++;
+			data[0].cards[cardIndex].cp+=1;
+			data[0].cards[cardIndex].unspendedCP-=1;
+			cardInfo = data[0].cards[cardIndex];
+			data[0].save(function(err){});
+			
+			var tempJson = json({
+					type:"attributeRefresh",
+					cardInfo:cardInfo
+				});
+			socket.send(tempJson);
+		});
+		
+		
+	}
+	else if(from == "collection") {
+		console.log("get level up from hand");
+		var collectInfo = mongo.model('collectInfo');
+		collectInfo.find({username:userName},['cards'],function(err,data) {
+			if(attribute == 0) {
+				data[0].cards[cardIndex].hp += 20;
+				data[0].save(function(err){});
+			}
+			else if(attribute == 1) {
+				data[0].cards[cardIndex].ap += 5;
+				data[0].save(function(err){});
+			}
+			else if(attribute == 2) {
+				data[0].cards[cardIndex].sp += 1;
+				data[0].save(function(err){});
+			}
+			else if(attribute == 3) {
+				// not yet ready for test
+			}
+			
+			//data[0].cards[cardIndex].level++;
+			data[0].cards[cardIndex].cp+=1;
+			data[0].cards[cardIndex].unspendedCP-=1;
+			cardInfo = data[0].cards[cardIndex];
+			data[0].save(function(err){});
+			
+			var tempJson = json({
+				type:"attributeRefresh",
+				cardInfo:cardInfo
+			});
+			socket.send(tempJson);
+		});
+	}
+}
+
 //server function
 io.sockets.on('connection', function(socket) {
 	//socket.emit('message', "Face");
@@ -444,317 +749,6 @@ io.sockets.on('connection', function(socket) {
 		
 		// run functions
 		functionTable[inputMessage.type](inputMessage, socket);
-
-		// collection page handler
-		if(inputMessage.type == "collection") {
-			var call = inputMessage.call;	
-			console.log("call:",call);
-			var userName = inputMessage.username;
-			
-			// get player's collection/hand 
-			if(call == "getAllCard") {
-				var collectInfo = mongo.model('collectInfo');
-				var handInfo = mongo.model('handInfo');
-				collectInfo.find({username:userName},['cards'],function(err, collectionCard) {
-					//console.log("collectInfo", data.length);
-					handInfo.find({username:userName},['cards'],function(err, handCard) {
-						var CollectionNames = [];
-						var HandNames = [];
-						
-						var cCard = collectionCard[0].cards;
-						var hCard = handCard[0].cards
-						
-						console.log("cCard", cCard[0].name);
-						console.log("hCard", hCard[0].name);
-						
-						for(var i = 0; i < cCard.length; i++) {
-							CollectionNames.push(cCard[i].name);
-						}
-						for(var i = 0; i < hCard.length; i++) {
-							HandNames.push(hCard[i].name);
-						}
-						
-						var tempJson = json({
-							type:"cardList",
-							Collection:CollectionNames,
-							Hand:HandNames,
-							collectNum:CollectionNames.length,
-							handNum:HandNames.length
-						});
-						socket.send(tempJson);
-					});
-					
-				});
-			}
-			
-			// send back the infomation for selected card
-			else if(call == "selectCollectionCard" || call == "selectHandCard") {
-				
-				var cardIndex = inputMessage.cardIndex;
-				if(call == "selectCollectionCard") {
-					var collectInfo = mongo.model('collectInfo');	
-					collectInfo.find({username:userName},['cards'],function(err, data) {
-						//console.log("collectInfo", data.length);
-						//console.log("indexTexting:",data[0].cards[0]);
-						var data = data[0].cards;
-						
-						var tempJson = json({
-							type:"cardInfo",
-							selectedCardInfo:data[cardIndex]
-						});
-
-						console.log(tempJson);
-						//console.log(cardNames, cardNames.length);
-						socket.send(tempJson);
-					});
-				}
-				else {
-					var handInfo = mongo.model('handInfo');
-					handInfo.find({username:userName},['cards'],function(err, data) {
-						//console.log("collectInfo", data.length);
-						//console.log("indexTexting:",data[0].cards[0]);
-						var data = data[0].cards;
-						
-						var tempJson = json({
-							type:"cardInfo",
-							selectedCardInfo:data[cardIndex]
-						});
-
-						console.log(tempJson);
-						//console.log(cardNames, cardNames.length);
-						socket.send(tempJson);
-					});
-				}
-				
-			}
-			
-			// insert a card from hand set to collection set
-			else if(call == "insertToCollection") {
-				var cardIndex = inputMessage.cardIndex;
-				var collectInfo = mongo.model('collectInfo');
-				var handInfo = mongo.model('handInfo');
-				
-				// copy and remove from hand
-				handInfo.find({username:userName},['cards'],function(err, data) {
-					// copy object (card)
-					var cardToInsert = data[0].cards[cardIndex];					
-					
-					// remove from hand
-					//handInfo.update({username:userName},{'$unset':{'cards':cardIndex}},function(){});
-					
-					data[0].cards[cardIndex].remove();
-					data[0].save();
-					
-					// insert to collection
-					collectInfo.find({username:userName},['cards'],function(err, data) {
-						data[0].cards.push(cardToInsert);
-						data[0].save(function(err){});
-					});
-				});
-				
-			}
-			
-			// insert a card from collection set to hand set
-			else if(call == "insertToHand") {
-			
-				var cardIndex = inputMessage.cardIndex;
-				var collectInfo = mongo.model('collectInfo');
-				var handInfo = mongo.model('handInfo');
-				
-				// copy and remove from hand
-				collectInfo.find({username:userName},['cards'],function(err, data) {
-					// copy object (card)
-					var cardToInsert = data[0].cards[cardIndex];					
-					
-					// remove from collection
-					data[0].cards[cardIndex].remove();
-					data[0].save();
-					
-					/*
-					var tempCollect = data[0].cards;
-					tempCollect.splice(cardIndex-1,1);
-					collectInfo.update({username:userName},{upsert: true},{'$set':{'cards':tempHand}});
-					data[0].save(function(err){});
-					*/
-					
-					// insert to collection
-					handInfo.find({username:userName},['cards'],function(err, data) {
-						data[0].cards.push(cardToInsert);
-						data[0].save(function(err){});
-					});
-				});
-			}
-			
-			// level up a card
-			else if(call == "levelUp") {
-				var cardIndex = inputMessage.cardIndex;
-				var from = inputMessage.from;
-				var userInfo = mongo.model('infoDisplay');
-				
-				if(from == "hand") {
-					var cardInfo = mongo.model('handInfo');
-					cardInfo.find({username:userName},['cards'],function(err, card) {
-						userInfo.find({username:userName},['exp'],function(err, user) {
-							// if enough exp
-							console.log("userInfoFormat: ", user[0]);
-							if(user[0].exp >= card[0].cards[cardIndex].exp && card[0].cards[cardIndex].level < 3) {
-								card[0].cards[cardIndex].level++;
-								card[0].cards[cardIndex].unspendedCP += 5;
-								user[0].exp -= card[0].cards[cardIndex].exp;
-								card[0].cards[cardIndex].exp += 200;
-								card[0].save(function(err){});
-								user[0].save(function(err){});
-								var cardInfo = card[0].cards[cardIndex];
-								var tempJson = json({
-									type:"levelupRefresh",
-									cardInfo:cardInfo,
-									userExp:user[0].exp
-								});
-								socket.send(tempJson);
-							}
-							// if reach max level
-							else if(card[0].cards[cardIndex].level >= 3) {
-								var tempJson = json({
-									type:"reachMaxLevel"
-								});
-								socket.send(tempJson);
-							}
-							// if not enought exp
-							else if(user[0].exp >= card[0].cards[cardIndex].exp){
-								var tempJson = json({
-									type:"notEnoughExp"
-								});
-								socket.send(tempJson);
-							}
-							
-						});
-					});
-				}
-				else if(from == "collection") {
-					var cardInfo = mongo.model('collectInfo');
-					cardInfo.find({username:userName},['cards'],function(err, card) {
-						userInfo.find({username:userName},['exp'],function(err, user) {
-							// if enough exp
-							if(user[0].exp >= card[0].cards[cardIndex].exp && card[0].cards[cardIndex].level < 3) {
-								console.log("cardLv: ", card[0].cards[cardIndex].level);
-								card[0].cards[cardIndex].level++;
-								card[0].cards[cardIndex].unspendedCP += 5;
-								user[0].exp -= card[0].cards[cardIndex].exp;
-								card[0].cards[cardIndex].exp += 200;
-								card[0].save(function(err){});
-								user[0].save(function(err){});
-								var cardInfo = card[0].cards[cardIndex];
-								var tempJson = json({
-									type:"levelupRefresh",
-									cardInfo:cardInfo,
-									userExp:user[0].exp
-								});
-								socket.send(tempJson);
-							}
-							// if reach max level
-							else if(card[0].cards[cardIndex].level >= 3) {
-								var tempJson = json({
-									type:"reachMaxLevel"
-								});
-								socket.send(tempJson);
-							}
-							// if not enought exp
-							else if(user[0].exp >= card[0].cards[cardIndex].exp) {
-								var tempJson = json({
-									type:"notEnoughExp"
-								});
-								socket.send(tempJson);
-							}
-							
-						});
-					});
-				}
-			}
-			
-			// add attribute on a card
-			else if(call == "addAttribute") {
-				var cardIndex = inputMessage.cardIndex;
-				var from = inputMessage.from;
-				
-				// 58 = HitPoint, 59 = attack point, 60 = soul point, 61 = special effect
-				var attribute = inputMessage.attribute;
-				
-				// temp variabl
-				var userExp, cardInfo;
-				
-				console.log("attribute: ", attribute);
-				if(from == "hand") {
-					console.log("get level up from hand");
-					var handInfo = mongo.model('handInfo');
-					handInfo.find({username:userName},['cards'],function(err,data) {
-						if(attribute == 58) {
-							data[0].cards[cardIndex].hp += 20;
-							data[0].save(function(err){});
-						}
-						else if(attribute == 59) {
-							data[0].cards[cardIndex].ap += 5;
-							data[0].save(function(err){});
-						}
-						else if(attribute == 60) {
-							data[0].cards[cardIndex].sp += 1;
-							data[0].save(function(err){});
-						}
-						else if(attribute == 61) {
-							// not yet ready for test
-						}
-						
-						//data[0].cards[cardIndex].level++;
-						data[0].cards[cardIndex].cp+=1;
-						data[0].cards[cardIndex].unspendedCP-=1;
-						cardInfo = data[0].cards[cardIndex];
-						data[0].save(function(err){});
-						
-						var tempJson = json({
-								type:"attributeRefresh",
-								cardInfo:cardInfo
-							});
-						socket.send(tempJson);
-					});
-					
-					
-				}
-				else if(from == "collection") {
-					console.log("get level up from hand");
-					var collectInfo = mongo.model('collectInfo');
-					collectInfo.find({username:userName},['cards'],function(err,data) {
-						if(attribute == 58) {
-							data[0].cards[cardIndex].hp += 20;
-							data[0].save(function(err){});
-						}
-						else if(attribute == 59) {
-							data[0].cards[cardIndex].ap += 5;
-							data[0].save(function(err){});
-						}
-						else if(attribute == 60) {
-							data[0].cards[cardIndex].sp += 1;
-							data[0].save(function(err){});
-						}
-						else if(attribute == 61) {
-							// not yet ready for test
-						}
-						
-						//data[0].cards[cardIndex].level++;
-						data[0].cards[cardIndex].cp+=1;
-						data[0].cards[cardIndex].unspendedCP-=1;
-						cardInfo = data[0].cards[cardIndex];
-						data[0].save(function(err){});
-						
-						var tempJson = json({
-							type:"attributeRefresh",
-							cardInfo:cardInfo
-						});
-						socket.send(tempJson);
-					});
-				}
-				
-				
-			}
-		}
 
 	});
 	

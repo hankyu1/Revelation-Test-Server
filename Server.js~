@@ -6,7 +6,7 @@
 //var memberList = [];
 var app = require('http').createServer();
 var io = require('socket.io').listen(app, {origins: '*:*'});
-var port = process.env.PORT || 80;
+var port = process.env.PORT || 5000;
 app.listen(port);
 //var userName = "";
 var lobby = [];
@@ -107,28 +107,33 @@ functionTable["loginString"] = function(inputMessage, socket){
 	loginInfo.find({'username':username},['username','password'],function(err,data){
 		var isOnline = false;
 		
-		findIsOnline:
-		for(var i = 0; i < lobby.length; i++) {
-			if(lobby[i].username == username) {
-				isOnline = true;
-				break findIsOnline;
-			}
-		}
-		
-		if(data.length != 0) {
-			if(data[0].password == password && !isOnline) {
-				socket.send(json({login:"true"}));
-				lobby.push(new Player(username, lobby.length, socket));
-				for(var i = 0; i < lobby.length-1; i++) {
-					lobby[i].socket.send(json({
-						type:"EnterRoom",
-						id:username
-					}));
+		if(data.length >0) {
+			findIsOnline:
+			for(var i = 0; i < lobby.length; i++) {
+				if(lobby[i].username == username) {
+					isOnline = true;
+					break findIsOnline;
 				}
 			}
-			else {
-				socket.send(json({login:"false"}));
+		
+			if(data.length != 0) {
+				if(data[0].password == password && !isOnline) {
+					socket.send(json({login:"true"}));
+					lobby.push(new Player(username, lobby.length, socket));
+					for(var i = 0; i < lobby.length-1; i++) {
+						lobby[i].socket.send(json({
+							type:"EnterRoom",
+							id:username
+						}));
+					}
+				}
+				else {
+					socket.send(json({login:"false"}));
+				}
 			}
+		}
+		else {
+			socket.send(json({login:"false"}));
 		}
 	});
 }

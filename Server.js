@@ -6,12 +6,13 @@
 //var memberList = [];
 var app = require('http').createServer();
 var io = require('socket.io').listen(app, {origins: '*:*'});
-var port = process.env.PORT || 80;
+var port = process.env.PORT || 5000;
 app.listen(port);
 //var userName = "";
 var lobby = [];
 var matchRoom = [];
 var json = JSON.stringify;
+console.log(port);
 
 // assuming io is the Socket.IO server object
 io.configure(function () {

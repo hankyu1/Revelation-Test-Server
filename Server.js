@@ -749,8 +749,11 @@ io.sockets.on('connection', function(socket) {
 	//socket.emit('message', "Face");
 	console.log("Connected...");
 	socket.on('message', function(message) {
+		
+		console.log("received message from client...");
+		
 		console.log("Message in:" + message.toString());
-		//console.log("ASDFASDF");
+		
 		var inputMessage = JSON.parse(message);//message.split(",");
 		
 		// run functions

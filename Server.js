@@ -119,7 +119,7 @@ functionTable["loginString"] = function(inputMessage, socket){
 		
 			if(data.length != 0) {
 				if(data[0].password == password && !isOnline) {
-					socket.send(json({login:"true"}));
+					socket.emit('message',json({login:"true"}));
 					lobby.push(new Player(username, lobby.length, socket));
 					for(var i = 0; i < lobby.length-1; i++) {
 						lobby[i].socket.send(json({

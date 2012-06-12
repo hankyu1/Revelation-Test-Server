@@ -16,7 +16,7 @@ console.log(port);
 
 // assuming io is the Socket.IO server object
 io.configure(function () {
-  io.set("transports", ["xhr-polling"]);
+  io.set("transports", ["xhr-polling"]); 
   //io.set("polling duration", 10);
   //io.set("close timeout", 10);
   io.set('log', false);
@@ -119,7 +119,7 @@ functionTable["loginString"] = function(inputMessage, socket){
 		
 			if(data.length != 0) {
 				if(data[0].password == password && !isOnline) {
-					socket.emit('message',json({login:"true"}));
+					socket.send(json({login:"true"}));
 					lobby.push(new Player(username, lobby.length, socket));
 					for(var i = 0; i < lobby.length-1; i++) {
 						lobby[i].socket.send(json({
@@ -749,11 +749,8 @@ io.sockets.on('connection', function(socket) {
 	//socket.emit('message', "Face");
 	console.log("Connected...");
 	socket.on('message', function(message) {
-		
-		console.log("received message from client...");
-		
 		console.log("Message in:" + message.toString());
-		
+		//console.log("ASDFASDF");
 		var inputMessage = JSON.parse(message);//message.split(",");
 		
 		// run functions

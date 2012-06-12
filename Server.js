@@ -27,7 +27,7 @@ var mongo = require('mongoose');
 var mongoURI = 'mongodb://heroku_app4863042:67h5m3kki74hd9k3roo0ufnl44@ds033307.mongolab.com:33307/heroku_app4863042';
 mongo.connect(mongoURI);
 mongo.connection.on("open", function() {
-	console.log("connection open");
+	console.log("connected to database...");
 });
 var Schema = mongo.Schema;
 

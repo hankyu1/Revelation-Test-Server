@@ -2,13 +2,13 @@
  * @author Hank
  */
 
-
-//var memberList = [];
 var app = require('http').createServer();
 var io = require('socket.io').listen(app, {origins: '*:*'});
+
+// get port
 var port = process.env.PORT || 80;
 app.listen(port);
-//var userName = "";
+
 var lobby = [];
 var matchRoom = [];
 var json = JSON.stringify;

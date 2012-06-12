@@ -3,12 +3,13 @@
  */
 
 
-//var memberList = [];
 var app = require('http').createServer();
 var io = require('socket.io').listen(app, {origins: '*:*'});
+
+// get port
 var port = process.env.PORT || 80;
 app.listen(port);
-//var userName = "";
+
 var lobby = [];
 var matchRoom = [];
 var json = JSON.stringify;
@@ -27,7 +28,7 @@ var mongo = require('mongoose');
 var mongoURI = 'mongodb://heroku_app4863042:67h5m3kki74hd9k3roo0ufnl44@ds033307.mongolab.com:33307/heroku_app4863042';
 mongo.connect(mongoURI);
 mongo.connection.on("open", function() {
-	console.log("connection open");
+	console.log("connected to database...");
 });
 var Schema = mongo.Schema;
 

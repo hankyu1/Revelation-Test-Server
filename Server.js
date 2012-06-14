@@ -1057,7 +1057,7 @@ fusionCallTable['startFusion'] = function(inputMessage, socket) {
 //server function
 io.sockets.on('connection', function(socket) {
 	//socket.emit('message', "Face");
-	console.log("Connected...");
+	console.log("Connected...", socket);
 	socket.on('message', function(message) {
 		console.log("ASDFASDF");
 		console.log("Message in:" + message.toString());

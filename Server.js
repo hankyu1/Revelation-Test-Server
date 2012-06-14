@@ -3,7 +3,7 @@
  */
 
 var app = require('http').createServer();
-var io = require('socket.io').listen(app, {origins: '*:*'});
+var io = require('socket.io').listen(app);
 
 //Middleware: Allows cross-domain requests (CORS)
 var allowCrossDomain = function(req, res, next) {
@@ -25,17 +25,9 @@ console.log(port);
 
 // assuming io is the Socket.IO server object
 io.configure(function () {
+  io.set('origins','*');
   io.set("transports", ["xhr-polling"]); 
   io.set('log', true);
-  io.set('views', __dirname + '/views');
-  io.set('view engine', 'jade');
-  io.use(express.bodyParser());
-  io.use(express.cookieParser());
-  io.use(express.session({ secret: 'secret' }));
-  io.use(express.methodOverride());
-  io.use(allowCrossDomain);
-  io.use(app.router);
-  io.use(express.static(__dirname + '/public'));
 });
 
 //database test

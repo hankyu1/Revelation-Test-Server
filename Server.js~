@@ -108,6 +108,12 @@ functionTable["loginString"] = function(inputMessage, socket){
 	loginInfo.find({'username':username},['username','password'],function(err,data){
 		var isOnline = false;
 		
+		console.log("getting login info:");
+		
+		if(err) {
+			console.log("err at login:", err);
+		}
+		
 		if(data.length >0) {
 			findIsOnline:
 			for(var i = 0; i < lobby.length; i++) {

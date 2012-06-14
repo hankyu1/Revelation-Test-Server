@@ -2,7 +2,6 @@
  * @author Hank
  */
 
-
 var app = require('http').createServer();
 var io = require('socket.io').listen(app, {origins: '*:*'});
 
@@ -562,13 +561,6 @@ CollectionCallTable['insertToHand'] = function(inputMessage, userName, socket) {
 		data[0].cards[cardIndex].remove();
 		data[0].save();
 		
-		/*
-		var tempCollect = data[0].cards;
-		tempCollect.splice(cardIndex-1,1);
-		collectInfo.update({username:userName},{upsert: true},{'$set':{'cards':tempHand}});
-		data[0].save(function(err){});
-		*/
-		
 		// insert to collection
 		handInfo.find({username:userName},['cards'],function(err, data) {
 			data[0].cards.push(cardToInsert);
@@ -588,7 +580,7 @@ CollectionCallTable['levelUp'] = function(inputMessage, userName, socket) {
 		cardInfo.find({username:userName},['cards'],function(err, card) {
 			userInfo.find({username:userName},['exp'],function(err, user) {
 				// if enough exp
-				console.log("userInfoFormat: ", user[0]);
+				console.log("userInfoFormat: ", user[0], card[0].cards[cardIndex]);
 				if(user[0].exp >= card[0].cards[cardIndex].exp && card[0].cards[cardIndex].level < 3) {
 					card[0].cards[cardIndex].level++;
 					card[0].cards[cardIndex].unspendedCP += 5;
@@ -711,7 +703,7 @@ CollectionCallTable['addAttribute'] = function(inputMessage, userName, socket) {
 		
 	}
 	else if(from == "collection") {
-		console.log("get level up from hand");
+		console.log("get level up from collection");
 		var collectInfo = mongo.model('collectInfo');
 		collectInfo.find({username:userName},['cards'],function(err,data) {
 			if(attribute == 0) {
@@ -719,6 +711,7 @@ CollectionCallTable['addAttribute'] = function(inputMessage, userName, socket) {
 				data[0].save(function(err){});
 			}
 			else if(attribute == 1) {
+				console.log("?? leveling up like a bawls");
 				data[0].cards[cardIndex].ap += 5;
 				data[0].save(function(err){});
 			}
@@ -743,6 +736,316 @@ CollectionCallTable['addAttribute'] = function(inputMessage, userName, socket) {
 			socket.send(tempJson);
 		});
 	}
+}
+
+// fusion
+var fusionCallTable = {};
+functionTable['fusion'] = function(inputMessage, socket) {
+	
+	fusionCallTable[inputMessage.call](inputMessage, socket);
+}
+
+// get fusion list
+fusionCallTable['getFusionList'] = function(inputMessage, socket) {
+	var username = inputMessage.username;
+	var collectInfo = mongo.model('collectInfo');
+	
+	// return collection cards
+	collectInfo.find({username:username}, ['cards'], function(err, data) {
+		var tempJson = json({
+			type:"fusionList",
+			cards:data[0].cards,
+			cardNum:data[0].cards.length
+		});
+		
+		socket.send(tempJson);
+	});
+}
+
+// fuse selected cards
+fusionCallTable['startFusion'] = function(inputMessage, socket) {
+	var username = inputMessage.username;
+	var collectInfo = mongo.model('collectInfo');
+	var card1Index = inputMessage.card1Index;
+	var card2Index = inputMessage.card2Index;
+	
+	console.log('fusionInfomation:', username, card1Index, card2Index);
+	
+	collectInfo.find({username:username}, ['cards'], function(err, data) {
+		var card1 = data[0].cards[card1Index-1];
+		var card2 = data[0].cards[card2Index-1];
+		
+		var lowCP, highCP;
+		
+		//find range
+		if(card1.cp >= card2.cp) {
+			lowCP = card2.cp;
+			highCP = card1.cp;
+		}
+		else {
+			lowCP = card1.cp;
+			highCP = card2.cp;
+		}
+		
+		console.log("cp range:", lowCP, highCP);
+		
+		var monster_cards = mongo.model('monster_cards');
+		
+		/*Fusing two creatures from opposing factions will result in a creature
+		from a third unrelated faction.*/
+		
+		if(card1.affiliation == card2.opposition) {
+			monster_cards.find({affiliation:{$ne:card1.affiliation, $ne:card2.affiliation}, cp:{$gte:lowCP, $lte:highCP}}, 
+			function(err, fuse) {
+				var index = Math.floor((Math.random()*data.length)); 
+				console.log("rule2:",fuse[index]);
+				
+				// get the fuse result
+				var fuseCard = fuse[index];
+				
+				// remove cards from collection
+				console.log("card1",data[0].cards[card1Index-1]);
+				console.log("card2",data[0].cards[card2Index-1]);
+				
+				var removeIndex1, removeIndex2;
+				
+				if(card1Index >= card2Index) {
+					removeIndex1 = card2Index-1;
+					removeIndex2 = card1Index-1;
+				}
+				else {
+					removeIndex1 = card1Index-1;
+					removeIndex2 = card2Index-1;
+				}
+				
+				console.log("removeIndex:", removeIndex1, removeIndex2);
+				
+				data[0].cards[removeIndex1].remove(function(err) {
+					if(!err) {
+						data[0].cards[removeIndex2-(removeIndex2-removeIndex1)].remove(function(err) {
+							if(!err) {
+								console.log("completly remove 2 cards");
+								
+								console.log("adding card to collection");
+								// add card to collection
+								var newCard = {
+									cardID:fuseCard.cardID,
+									name:fuseCard.name,
+									hp:fuseCard.hp,
+									ap:fuseCard.ap,
+									cp:fuseCard.cp,
+									sp:fuseCard.sp,
+									ability:fuseCard.ability,
+									affiliation:fuseCard.affiliation,
+									opposition:fuseCard.opposition,
+									image:fuseCard.image,
+									description:fuseCard.description,
+									note:fuseCard.note,
+									exp:200,
+									level:0,
+									unspendedCP:0
+								};
+								
+								data[0].save(function(err) {
+									if(!err) {
+										console.log("save after removing 2 elements from arra");
+										data[0].cards.push(newCard);
+										data[0].save(function(err){
+											if(!err){
+												console.log("Saving...");
+												var tempJson = json({
+													type:"fusionList",
+													cards:data[0].cards,
+													cardNum:data[0].cards.length,
+													isFsion:"true",
+													fusionCard:newCard
+												});
+												socket.send(tempJson);
+											}
+											else
+												console.log("err after pusing:",err);
+										});
+									}
+									else
+										console.log("err after saving after removing 2 elements...");
+								});
+							}
+						});
+					}
+				});
+			});
+		}
+		
+		/*Fusing two creatures of the same faction will result in a creature of
+		the same faction.*/
+		
+		else if(card1.affiliation == card2.affiliation) {
+			monster_cards.find({affiliation:card1.affiliation, cp:{$gte:lowCP, $lte:highCP}}, 
+			function(err, fuse) {
+				var index = Math.floor((Math.random()*data.length)); 
+				console.log("rule2:",fuse[index]);
+				
+				// get the fuse result
+				var fuseCard = fuse[index];
+				
+				// remove cards from collection
+				console.log("card1",data[0].cards[card1Index-1]);
+				console.log("card2",data[0].cards[card2Index-1]);
+				
+				var removeIndex1, removeIndex2;
+				
+				if(card1Index >= card2Index) {
+					removeIndex1 = card2Index-1;
+					removeIndex2 = card1Index-1;
+				}
+				else {
+					removeIndex1 = card1Index-1;
+					removeIndex2 = card2Index-1;
+				}
+				
+				console.log("removeIndex:", removeIndex1, removeIndex2);
+				
+				data[0].cards[removeIndex1].remove(function(err) {
+					if(!err) {
+						data[0].cards[removeIndex2-(removeIndex2-removeIndex1)].remove(function(err) {
+							if(!err) {
+								console.log("completly remove 2 cards");
+								
+								console.log("adding card to collection");
+								// add card to collection
+								var newCard = {
+									cardID:fuseCard.cardID,
+									name:fuseCard.name,
+									hp:fuseCard.hp,
+									ap:fuseCard.ap,
+									cp:fuseCard.cp,
+									sp:fuseCard.sp,
+									ability:fuseCard.ability,
+									affiliation:fuseCard.affiliation,
+									opposition:fuseCard.opposition,
+									image:fuseCard.image,
+									description:fuseCard.description,
+									note:fuseCard.note,
+									exp:200,
+									level:0,
+									unspendedCP:0
+								};
+								
+								data[0].save(function(err) {
+									if(!err) {
+										console.log("save after removing 2 elements from arra");
+										data[0].cards.push(newCard);
+										data[0].save(function(err){
+											if(!err){
+												console.log("Saving...");
+												var tempJson = json({
+													type:"fusionList",
+													cards:data[0].cards,
+													cardNum:data[0].cards.length,
+													isFsion:"true",
+													fusionCard:newCard
+												});
+												socket.send(tempJson);
+											}
+											else
+												console.log("err after pusing:",err);
+										});
+									}
+									else
+										console.log("err after saving after removing 2 elements...");
+								});
+							}
+						});
+					}
+				});
+			});
+		}
+		
+		/*Fusing two creatures from unrelated factions will result in a creature
+		from one of the two factions.*/
+		
+		else {
+			monster_cards.find({$or:[{affiliation:card1.affiliation},{affiliation:card2.affiliation}], cp:{$gte:lowCP, $lte:highCP}},
+			function(err, fuse) {
+				var index = Math.floor((Math.random()*data.length)); 
+				console.log("rule2:",fuse[index]);
+				
+				// get the fuse result
+				var fuseCard = fuse[index];
+				
+				// remove cards from collection
+				console.log("card1",data[0].cards[card1Index-1]);
+				console.log("card2",data[0].cards[card2Index-1]);
+				
+				var removeIndex1, removeIndex2;
+				
+				if(card1Index >= card2Index) {
+					removeIndex1 = card2Index-1;
+					removeIndex2 = card1Index-1;
+				}
+				else {
+					removeIndex1 = card1Index-1;
+					removeIndex2 = card2Index-1;
+				}
+				
+				console.log("removeIndex:", removeIndex1, removeIndex2);
+				
+				data[0].cards[removeIndex1].remove(function(err) {
+					if(!err) {
+						data[0].cards[removeIndex2-(removeIndex2-removeIndex1)].remove(function(err) {
+							if(!err) {
+								console.log("completly remove 2 cards");
+								
+								console.log("adding card to collection");
+								// add card to collection
+								var newCard = {
+									cardID:fuseCard.cardID,
+									name:fuseCard.name,
+									hp:fuseCard.hp,
+									ap:fuseCard.ap,
+									cp:fuseCard.cp,
+									sp:fuseCard.sp,
+									ability:fuseCard.ability,
+									affiliation:fuseCard.affiliation,
+									opposition:fuseCard.opposition,
+									image:fuseCard.image,
+									description:fuseCard.description,
+									note:fuseCard.note,
+									exp:200,
+									level:0,
+									unspendedCP:0
+								};
+								
+								data[0].save(function(err) {
+									if(!err) {
+										console.log("save after removing 2 elements from arra");
+										data[0].cards.push(newCard);
+										data[0].save(function(err){
+											if(!err){
+												console.log("Saving...");
+												var tempJson = json({
+													type:"fusionList",
+													cards:data[0].cards,
+													cardNum:data[0].cards.length,
+													isFsion:"true",
+													fusionCard:newCard
+												});
+												socket.send(tempJson);
+											}
+											else
+												console.log("err after pusing:",err);
+										});
+									}
+									else
+										console.log("err after saving after removing 2 elements...");
+								});
+							}
+						});
+					}
+				});
+			});
+		}
+	});
 }
 
 //server function

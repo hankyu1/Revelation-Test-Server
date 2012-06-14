@@ -1059,10 +1059,11 @@ io.sockets.on('connection', function(socket) {
 	//socket.emit('message', "Face");
 	console.log("Connected...");
 	socket.on('message', function(message) {
+		console.log("ASDFASDF");
 		console.log("Message in:" + message.toString());
-		//console.log("ASDFASDF");
-		var inputMessage = JSON.parse(message);//message.split(",");
 		
+		
+		var inputMessage = JSON.parse(message);//message.split(",");
 		// run functions
 		functionTable[inputMessage.type](inputMessage, socket);
 

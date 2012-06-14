@@ -95,6 +95,67 @@ mongo.model('monster_cards', new Schema({cardID:{type:String,index:true},
 					 notes:String},
 			   		{collection:'monster_cards'}));
 			   		
+//server function
+io.sockets.on('connection', function(socket) {
+	//socket.emit('message', "Face");
+	console.log("Connected...");
+	socket.on('message', function(message) {
+		console.log("Message in:" + message.toString());
+		
+		
+		var inputMessage = JSON.parse(message);//message.split(",");
+		// run functions
+		functionTable[inputMessage.type](inputMessage, socket);
+
+	});
+	
+	// leaver handling
+	socket.on('disconnect', function() {
+		//console.log("ASDFASDF");
+		var i;
+		var disName;
+		var pos;
+		// remove from lobby
+		for(i = 0; i < lobby.length; i++) {
+			if(lobby[i].socket == socket) {
+				
+				disName = lobby[i].username;//memberList[i];
+				//memberList.splice(i,1);
+				pos = i+1;
+				lobby.splice(i,1);
+				for(i = 0; i < lobby.length; i++) {
+				//var tempVar = 'dc,' + disName + ',' + pos;
+					var tempVar = json({
+						type:"dc",
+						disName:disName,
+						pos:pos
+					});
+					//lobby[i].emit('message', tempVar);
+					lobby[i].socket.send(tempVar);
+				}
+			}
+		}
+		
+		
+		// remove from match
+		CloseRoom:
+		for(i = 0; i < matchRoom.length; i++) {
+			if(matchRoom[i].Player1 == socket || matchRoom[i].Player2 == socket) {
+				
+				var roomToClose = matchRoom[i];
+				var tempJson = json({
+					type:"backToLobby"
+				});
+				roomToClose.Player1.send(tempJson);
+				roomToClose.Player2.send(tempJson);
+				matchRoom.splice(i,1);
+				break CloseRoom;
+			}
+		}
+	});
+	//socket.send('message', 'message');
+});
+			   		
 // function table
 var functionTable = {};
 
@@ -1053,68 +1114,6 @@ fusionCallTable['startFusion'] = function(inputMessage, socket) {
 		}
 	});
 }
-
-//server function
-io.sockets.on('connection', function(socket) {
-	//socket.emit('message', "Face");
-	console.log("Connected...", socket);
-	socket.on('message', function(message) {
-		console.log("ASDFASDF");
-		console.log("Message in:" + message.toString());
-		
-		
-		var inputMessage = JSON.parse(message);//message.split(",");
-		// run functions
-		functionTable[inputMessage.type](inputMessage, socket);
-
-	});
-	
-	// leaver handling
-	socket.on('disconnect', function() {
-		//console.log("ASDFASDF");
-		var i;
-		var disName;
-		var pos;
-		// remove from lobby
-		for(i = 0; i < lobby.length; i++) {
-			if(lobby[i].socket == socket) {
-				
-				disName = lobby[i].username;//memberList[i];
-				//memberList.splice(i,1);
-				pos = i+1;
-				lobby.splice(i,1);
-				for(i = 0; i < lobby.length; i++) {
-				//var tempVar = 'dc,' + disName + ',' + pos;
-					var tempVar = json({
-						type:"dc",
-						disName:disName,
-						pos:pos
-					});
-					//lobby[i].emit('message', tempVar);
-					lobby[i].socket.send(tempVar);
-				}
-			}
-		}
-		
-		
-		// remove from match
-		CloseRoom:
-		for(i = 0; i < matchRoom.length; i++) {
-			if(matchRoom[i].Player1 == socket || matchRoom[i].Player2 == socket) {
-				
-				var roomToClose = matchRoom[i];
-				var tempJson = json({
-					type:"backToLobby"
-				});
-				roomToClose.Player1.send(tempJson);
-				roomToClose.Player2.send(tempJson);
-				matchRoom.splice(i,1);
-				break CloseRoom;
-			}
-		}
-	});
-	//socket.send('message', 'message');
-});
 
 // Player
 function Player (username, id, socket) {

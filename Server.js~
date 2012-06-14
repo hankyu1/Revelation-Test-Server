@@ -19,7 +19,7 @@ io.configure(function () {
   io.set("transports", ["xhr-polling"]); 
   //io.set("polling duration", 10);
   //io.set("close timeout", 10);
-  io.set('log', false);
+  io.set('log', true);
 });
 
 //database test
